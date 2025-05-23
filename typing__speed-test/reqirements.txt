@@ -1,0 +1,6 @@
+flask==2.3.3
+sqlite3==2.6.0
+json==2.0.9
+os==0.1.0
+requests==2.31.0
+
