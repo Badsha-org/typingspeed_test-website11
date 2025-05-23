@@ -2,12 +2,25 @@ from flask import Flask, jsonify, render_template, request
 import json
 import sqlite3
 import os
+from pathlib import Path
+
+# Get the directory containing this script
+BASE_DIR = Path(__file__).parent
 
 app = Flask(__name__)
 
 # Initialize SQLite database
+def get_db_path():
+    # In production, use the instance folder
+    if os.environ.get('RENDER'):
+        return os.path.join('instance', 'typing.db')
+    return 'typing.db'
+
 def init_db():
-    conn = sqlite3.connect('typing.db')
+    db_path = get_db_path()
+    os.makedirs(os.path.dirname(db_path) or '.', exist_ok=True)
+    
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS stats
                  (user_id TEXT, wpm INTEGER, accuracy INTEGER, errors INTEGER, timestamp TEXT)''')
@@ -16,10 +29,11 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Initialize the database when the app starts
 init_db()
 
 # Load initial quotes
-quotes_file = 'quotes.json'
+quotes_file = os.path.join(BASE_DIR, 'quotes.json')
 if not os.path.exists(quotes_file):
     with open(quotes_file, 'w') as f:
         json.dump([
@@ -86,7 +100,8 @@ def index():
 
 @app.route('/quotes')
 def get_quotes():
-    conn = sqlite3.connect('typing.db')
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.execute('SELECT quote FROM quotes')
     db_quotes = [row[0] for row in c.fetchall()]
@@ -96,7 +111,8 @@ def get_quotes():
 @app.route('/save_stats', methods=['POST'])
 def save_stats():
     data = request.json
-    conn = sqlite3.connect('typing.db')
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.execute('INSERT INTO stats (user_id, wpm, accuracy, errors, timestamp) VALUES (?, ?, ?, ?, ?)',
               (data['user_id'], data['wpm'], data['accuracy'], data['errors'], data['timestamp']))
@@ -108,7 +124,8 @@ def save_stats():
 def add_quote():
     data = request.json
     quote = data['quote']
-    conn = sqlite3.connect('typing.db')
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.execute('INSERT INTO quotes (quote) VALUES (?)', (quote,))
     conn.commit()
@@ -116,4 +133,5 @@ def add_quote():
     return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
